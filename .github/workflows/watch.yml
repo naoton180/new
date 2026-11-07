@@ -1,0 +1,46 @@
+
+name: toreta-watch
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # 5分おきに起動し、中で1分おきに5回確認(起動が遅れると数分の隙間が出ることあり)
+  workflow_dispatch:         # 手動実行ボタン
+
+concurrency:
+  group: toreta-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      # 前回通知した枠を引き継ぐ(同じ枠で何度も通知しないため)
+      - name: Restore state
+        uses: actions/cache/restore@v4
+        with:
+          path: state.json
+          key: toreta-state-${{ github.run_id }}
+          restore-keys: toreta-state-
+
+      - name: Check availability
+        env:
+          TORETA_SLUG: bistroshin3
+          TARGET_DATES: ${{ vars.TARGET_DATES }}   # リポジトリの Variables で設定
+          SEATS: ${{ vars.SEATS }}
+          TIME_FROM: ${{ vars.TIME_FROM }}
+          TIME_TO: ${{ vars.TIME_TO }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}     # リポジトリの Secrets で設定
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          LOOP_COUNT: "5"      # 1回の実行で5回確認
+          INTERVAL_SEC: "60"   # 60秒おき → 実質1分間隔
+        run: python3 monitor.py
+
+      - name: Save state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state.json
+          key: toreta-state-${{ github.run_id }}
